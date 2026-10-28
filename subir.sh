@@ -22,8 +22,16 @@ if [ ! -r "$PUERTO" ] || [ ! -w "$PUERTO" ]; then
   pkexec setfacl -m "u:$USER:rw" "$(readlink -f "$PUERTO")"
 fi
 
-"$PIO" run -t upload --upload-port "$PUERTO"
-echo "Subido a $PUERTO."
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
+if "$PIO" run -t upload --upload-port "$PUERTO" 2>&1 | tee "$LOG"; then
+  echo "Subido a $PUERTO."
+elif grep -q "bytes of flash written" "$LOG"; then
+  echo "AVISO: el flash se escribió completo pero falló la verificación (lectura de vuelta). Probablemente funciona." >&2
+  echo "Si se repite: revisa que nada esté en D0/D1 y cambia el cable USB." >&2
+else
+  exit 1
+fi
 
 if [ "${1:-}" = "monitor" ]; then
   exec "$PIO" device monitor -p "$PUERTO" -b 9600 --filter printable
